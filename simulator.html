@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ユニットエコノミクス シミュレーター</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #222535;
+    --border: #2e3250;
+    --text: #e8eaf6;
+    --muted: #8b90b8;
+    --accent: #6c63ff;
+    --accent2: #00d4aa;
+    --accent3: #ff6b6b;
+    --accent4: #ffd93d;
+    --green: #4caf50;
+    --red: #f44336;
+    --warn: #ff9800;
+  }
+  body { background: var(--bg); color: var(--text); font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 14px; }
+
+  /* Header */
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; gap: 16px; }
+  header h1 { font-size: 18px; font-weight: 700; color: var(--text); }
+  header p { color: var(--muted); font-size: 12px; }
+  .scenario-tabs { margin-left: auto; display: flex; gap: 6px; }
+  .scenario-tab { padding: 6px 16px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; font-size: 13px; transition: all 0.2s; }
+  .scenario-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* Layout */
+  .layout { display: grid; grid-template-columns: 320px 1fr; height: calc(100vh - 57px); overflow: hidden; }
+
+  /* Sidebar */
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 16px; }
+  .sidebar-section { margin-bottom: 20px; }
+  .sidebar-section h3 { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  .input-row { margin-bottom: 12px; }
+  .input-row label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; color: var(--text); font-size: 12px; }
+  .input-row .val { color: var(--accent2); font-weight: 600; font-size: 13px; }
+  .input-row input[type=range] { width: 100%; height: 4px; accent-color: var(--accent); cursor: pointer; }
+  .input-row .hint { color: var(--muted); font-size: 10px; margin-top: 2px; }
+
+  /* Main */
+  .main { overflow-y: auto; padding: 20px; }
+
+  /* Tabs */
+  .main-tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 0; }
+  .main-tab { padding: 8px 20px; border-radius: 6px 6px 0 0; border: 1px solid transparent; border-bottom: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 13px; transition: all 0.2s; margin-bottom: -1px; }
+  .main-tab.active { background: var(--surface2); border-color: var(--border); border-bottom-color: var(--surface2); color: var(--text); }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Cards */
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .kpi-card .label { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .kpi-card .value { font-size: 22px; font-weight: 700; color: var(--text); }
+  .kpi-card .sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .kpi-card.good .value { color: var(--accent2); }
+  .kpi-card.warn .value { color: var(--warn); }
+  .kpi-card.bad .value { color: var(--red); }
+
+  /* Charts */
+  .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .chart-card.full { grid-column: 1 / -1; }
+  .chart-card h4 { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 14px; }
+  .chart-wrap { position: relative; height: 200px; }
+  .chart-wrap.tall { height: 260px; }
+
+  /* PL Table */
+  .pl-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .pl-table th { background: var(--surface2); color: var(--muted); font-weight: 600; padding: 8px 12px; text-align: right; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .pl-table th:first-child { text-align: left; }
+  .pl-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); text-align: right; color: var(--text); }
+  .pl-table td:first-child { text-align: left; color: var(--muted); }
+  .pl-table tr.header-row td { background: var(--surface2); font-weight: 600; color: var(--text); font-size: 12px; }
+  .pl-table tr.total-row td { background: var(--surface2); font-weight: 700; border-top: 2px solid var(--border); }
+  .pl-table tr.profit-row td { color: var(--accent2); font-weight: 700; font-size: 15px; }
+  .pl-table .neg { color: var(--red); }
+  .pl-table .b2c { color: #a78bfa; }
+  .pl-table .b2b2c { color: var(--accent2); }
+  .pl-table .b2b { color: var(--accent4); }
+
+  /* Bottleneck */
+  .gate-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; }
+  .gate-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .gate-card .gate-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .gate-card h4 { font-size: 13px; font-weight: 600; }
+  .gate-status { font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+  .gate-status.ok { background: rgba(76,175,80,0.2); color: var(--green); }
+  .gate-status.warn { background: rgba(255,152,0,0.2); color: var(--warn); }
+  .gate-status.bad { background: rgba(244,67,54,0.2); color: var(--red); }
+  .gate-status.unknown { background: rgba(139,144,184,0.2); color: var(--muted); }
+  .gate-desc { font-size: 11px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
+  .gate-bar-bg { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .gate-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+  .gate-nums { display: flex; justify-content: space-between; margin-top: 4px; font-size: 10px; color: var(--muted); }
+
+  /* Exit */
+  .exit-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+  .exit-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; text-align: center; }
+  .exit-card .method { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .exit-card .ev { font-size: 24px; font-weight: 700; color: var(--accent4); }
+  .exit-card .range { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* Sensitivity */
+  .sens-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .sens-table th { background: var(--surface2); color: var(--muted); padding: 8px; text-align: center; font-size: 11px; }
+  .sens-table td { padding: 8px; text-align: center; border: 1px solid var(--border); }
+  .heat-low { background: rgba(244,67,54,0.15); color: var(--red); }
+  .heat-mid { background: rgba(255,152,0,0.15); color: var(--warn); }
+  .heat-high { background: rgba(76,175,80,0.15); color: var(--green); }
+  .heat-best { background: rgba(0,212,170,0.2); color: var(--accent2); font-weight: 700; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Badges */
+  .badge { display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+  .badge-b2c { background: rgba(167,139,250,0.2); color: #a78bfa; }
+  .badge-b2b2c { background: rgba(0,212,170,0.2); color: var(--accent2); }
+  .badge-b2b { background: rgba(255,217,61,0.2); color: var(--accent4); }
+
+  .section-title { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin: 20px 0 12px; }
+  .divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+  .year-toggle { display: flex; gap: 6px; margin-bottom: 16px; }
+  .year-btn { padding: 5px 14px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; font-size: 12px; }
+  .year-btn.active { background: var(--surface2); border-color: var(--accent); color: var(--text); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>📊 ユニットエコノミクス シミュレーター</h1>
+    <p>数値をいじってリアルタイムで事業計画を確認</p>
+  </div>
+  <div class="scenario-tabs">
+    <button class="scenario-tab" onclick="setScenario('保守')">📉 保守</button>
+    <button class="scenario-tab active" onclick="setScenario('標準')">📊 標準</button>
+    <button class="scenario-tab" onclick="setScenario('強気')">🚀 強気</button>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- Sidebar: Inputs -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <h3>🎯 B2C（コホート直販）</h3>
+      <div class="input-row">
+        <label>受講者数/コホート <span class="val" id="v_b2c_students">60人</span></label>
+        <input type="range" id="b2c_students" min="20" max="120" step="10" value="60" oninput="update()">
+      </div>
+      <div class="input-row">
+        <label>Year2 コホート数 <span class="val" id="v_b2c_cohorts_y2">10回</span></label>
+        <input type="range" id="b2c_cohorts_y2" min="1" max="20" step="1" value="10" oninput="update()">
+      </div>
+      <div class="input-row">
+        <label>Year5 コホート数 <span class="val" id="v_b2c_cohorts_y5">25回</span></label>
+        <input type="range" id="b2c_cohorts_y5" min="5" max="50" step="5" value="25" oninput="update()">
+      </div>
+      <div class="input-row">
+        <label>単価/人（Year2） <span class="val" id="v_b2c_price_y2">¥100,000</span></label>
+        <input type="range" id="b2c_price_y2" min="50000" max="200000" step="5000" value="100000" oninput="update()">
+        <div class="hint">MVP:7.5万 → 標準:10万 → 高単価:12万</div>
+      </div>
+      <div class="input-row">
+        <label>単価/人（Year5） <span class="val" id="v_b2c_price_y5">¥120,000</span></label>
+        <input type="range" id="b2c_price_y5" min="80000" max="250000" step="5000" value="120000" oninput="update()">
+      </div>
+      <div class="input-row">
+        <label>CAC/人 <span class="val" id="v_b2c_cac">¥20,000</span></label>
+        <input type="range" id="b2c_cac" min="5000" max="100000" step="5000" value="20000" oninput="update()">
+        <div class="hint">⚠️ 未検証。5万超でB2C降格判断</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>🏫 B2B2C（塾向け）</h3>
+      <div class="input-row">
+        <label>Year2 教室数 <span class="val" id="v_b2b2c_rooms_y2">30教室</span></label>
+        <input type="range" id="b2b2c_rooms_y2" min="5" max="80" step="5" value="30" oninput="update()">
+      </div>
+      <div class="input-row">
+        <label>Year5 教室数 <span class="val" id="v_b2b2c_rooms_y5">150教室</span></label>
+        <input type="range" id="b2b2c_rooms_y5" min="30" max="300" step="10" value="150" oninput="update()">
+      </div>
+      <div class="input-row">
+        <label>平均単価/年（Year5） <span class="val" id="v_b2b2c_price_y5">¥2,200,000</span></label>
+        <input type="range" id="b2b2c_price_y5" min="1500000" max="3000000" step="100000" value="2200000" oninput="update()">
+        <div class="hint">Light:150万 → Standard:250万 → Premium:400万</div>
+      </div>
+      <div class="input-row">
+        <label>初年度工数/教室 <span class="val" id="v_b2b2c_hours_new">225h</span></label>
+        <input type="range" id="b2b2c_hours_new" min="80" max="300" step="10" value="225" oninput="update()">
+        <div class="hint">🎯 目標150h・ワースト225h</div>
+      </div>
+      <div class="input-row">
+        <label>継続工数/教室（Year5） <span class="val" id="v_b2b2c_hours_cont">40h</span></label>
+        <input type="range" id="b2b2c_hours_cont" min="20" max="150" step="10" value="40" oninput="update()">
+        <div class="hint">🎯 40h以下がオペレーション事業化の境界</div>
+      </div>
+      <div class="input-row">
+        <label>継続率 <span class="val" id="v_b2b2c_retention">80%</span></label>
+        <input type="range" id="b2b2c_retention" min="50" max="100" step="5" value="80" oninput="update()">
+        <div class="hint">70%未満でLTV/買収ストーリーが弱くなる</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>🎓 B2B（高校向け）</h3>
+      <div class="input-row">
+        <label>Year2 校数 <span class="val" id="v_b2b_schools_y2">5校</span></label>
+        <input type="range" id="b2b_schools_y2" min="1" max="20" step="1" value="5" oninput="update()">
+      </div>
+      <div class="input-row">
+        <label>Year5 校数 <span class="val" id="v_b2b_schools_y5">50校</span></label>
+        <input type="range" id="b2b_schools_y5" min="10" max="100" step="5" value="50" oninput="update()">
+      </div>
+      <div class="input-row">
+        <label>平均単価/校（Year5） <span class="val" id="v_b2b_price_y5">¥3,500,000</span></label>
+        <input type="range" id="b2b_price_y5" min="1000000" max="7000000" step="250000" value="3500000" oninput="update()">
+        <div class="hint">標準:250万 → 高校進学校:500万</div>
+      </div>
+      <div class="input-row">
+        <label>CAC/校 <span class="val" id="v_b2b_cac">¥200,000</span></label>
+        <input type="range" id="b2b_cac" min="100000" max="1500000" step="100000" value="200000" oninput="update()">
+        <div class="hint">創業者営業:20万 → BD1名:100〜150万</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>💰 固定費 / Exit</h3>
+      <div class="input-row">
+        <label>Year2 固定費/年 <span class="val" id="v_fixed_y2">¥9,000,000</span></label>
+        <input type="range" id="fixed_y2" min="5000000" max="20000000" step="1000000" value="9000000" oninput="update()">
+      </div>
+      <div class="input-row">
+        <label>Year5 組織化固定費/年 <span class="val" id="v_fixed_y5">¥120,000,000</span></label>
+        <input type="range" id="fixed_y5" min="60000000" max="200000000" step="10000000" value="120000000" oninput="update()">
+      </div>
+      <div class="input-row">
+        <label>EV/Sales マルチプル <span class="val" id="v_ev_sales">1.5x</span></label>
+        <input type="range" id="ev_sales" min="0.5" max="3.0" step="0.1" value="1.5" oninput="update()">
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main">
+    <div class="main-tabs">
+      <button class="main-tab active" onclick="showTab('dashboard')">📊 ダッシュボード</button>
+      <button class="main-tab" onclick="showTab('pl')">💹 P&L</button>
+      <button class="main-tab" onclick="showTab('bottleneck')">⚠️ ボトルネック</button>
+      <button class="main-tab" onclick="showTab('exit')">🏆 Exit</button>
+      <button class="main-tab" onclick="showTab('sensitivity')">🔬 感度分析</button>
+    </div>
+
+    <!-- DASHBOARD TAB -->
+    <div id="tab-dashboard" class="tab-content active">
+      <div class="year-toggle">
+        <button class="year-btn active" onclick="setYear('y2', this)">Year2</button>
+        <button class="year-btn" onclick="setYear('y5', this)">Year5</button>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card good">
+          <div class="label">売上</div>
+          <div class="value" id="kpi_revenue">—</div>
+          <div class="sub" id="kpi_revenue_sub">—</div>
+        </div>
+        <div class="kpi-card good">
+          <div class="label">直接貢献利益</div>
+          <div class="value" id="kpi_contribution">—</div>
+          <div class="sub" id="kpi_contribution_rate">—</div>
+        </div>
+        <div class="kpi-card good">
+          <div class="label">営業利益（固定費後）</div>
+          <div class="value" id="kpi_op_profit">—</div>
+          <div class="sub" id="kpi_op_rate">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="label">EV（EV/Sales想定）</div>
+          <div class="value" id="kpi_ev">—</div>
+          <div class="sub" id="kpi_ev_sub">—</div>
+        </div>
+      </div>
+
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h4>収益構成（セグメント別）</h4>
+          <div class="chart-wrap"><canvas id="chart_revenue_pie"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h4>貢献利益率比較</h4>
+          <div class="chart-wrap"><canvas id="chart_margin_bar"></canvas></div>
+        </div>
+        <div class="chart-card full">
+          <h4>Year2 → Year5 成長トレジェクトリ</h4>
+          <div class="chart-wrap tall"><canvas id="chart_growth"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- P&L TAB -->
+    <div id="tab-pl" class="tab-content">
+      <div class="year-toggle">
+        <button class="year-btn active" onclick="setYearPL('y2', this)">Year2</button>
+        <button class="year-btn" onclick="setYearPL('y5', this)">Year5</button>
+      </div>
+      <div class="chart-card">
+        <h4>統合P&L</h4>
+        <table class="pl-table" id="pl_table">
+          <thead>
+            <tr>
+              <th style="width:200px">項目</th>
+              <th>B2C</th>
+              <th>B2B2C塾</th>
+              <th>B2B高校</th>
+              <th>合計</th>
+            </tr>
+          </thead>
+          <tbody id="pl_body"></tbody>
+        </table>
+      </div>
+      <br>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h4>ウォーターフォール（利益の流れ）</h4>
+          <div class="chart-wrap tall"><canvas id="chart_waterfall"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h4>コスト構造内訳</h4>
+          <div class="chart-wrap tall"><canvas id="chart_cost"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTLENECK TAB -->
+    <div id="tab-bottleneck" class="tab-content">
+      <p style="color:var(--muted);font-size:12px;margin-bottom:16px;">現在の入力値に基づいてKPIゲートを評価しています。赤は要対策、黄は要注意。</p>
+      <div class="gate-grid" id="gate_grid"></div>
+      <div class="chart-card" style="margin-top:0">
+        <h4>B2Cユニット感度：CAC vs 単価</h4>
+        <div class="chart-wrap tall"><canvas id="chart_b2c_unit"></canvas></div>
+      </div>
+    </div>
+
+    <!-- EXIT TAB -->
+    <div id="tab-exit" class="tab-content">
+      <div class="section-title">Year5 Exit バリュエーション</div>
+      <div class="exit-grid" id="exit_grid"></div>
+      <div class="chart-grid" style="margin-top:16px">
+        <div class="chart-card">
+          <h4>シナリオ別EV比較</h4>
+          <div class="chart-wrap"><canvas id="chart_ev_scenario"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h4>EV/Sales マルチプル感度</h4>
+          <div class="chart-wrap"><canvas id="chart_ev_mult"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SENSITIVITY TAB -->
+    <div id="tab-sensitivity" class="tab-content">
+      <div class="section-title">Year5 営業利益 感度マトリクス（B2B2C平均単価 × 継続工数）</div>
+      <div class="chart-card" style="overflow-x:auto;margin-bottom:16px">
+        <table class="sens-table" id="sens_table_main"></table>
+      </div>
+      <div class="section-title">B2C コホート単位 損益 感度（単価 × CAC）</div>
+      <div class="chart-card" style="overflow-x:auto">
+        <table class="sens-table" id="sens_table_b2c"></table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ===================== STATE =====================
+let scenario = '標準';
+let currentYear = 'y2';
+let currentYearPL = 'y2';
+let charts = {};
+
+const SCENARIOS = {
+  '保守': { b2c_price_y2: 75000, b2c_price_y5: 120000, b2c_cac: 10000, b2b2c_price_y5: 2000000, b2b_price_y5: 2500000 },
+  '標準': { b2c_price_y2: 100000, b2c_price_y5: 120000, b2c_cac: 20000, b2b2c_price_y5: 2200000, b2b_price_y5: 3500000 },
+  '強気': { b2c_price_y2: 120000, b2c_price_y5: 120000, b2c_cac: 20000, b2b2c_price_y5: 2500000, b2b_price_y5: 5000000 },
+};
+
+function setScenario(s) {
+  scenario = s;
+  document.querySelectorAll('.scenario-tab').forEach((t,i) => t.classList.toggle('active', ['保守','標準','強気'][i] === s));
+  const vals = SCENARIOS[s];
+  for (const [k, v] of Object.entries(vals)) {
+    const el = document.getElementById(k);
+    if (el) { el.value = v; }
+  }
+  update();
+}
+
+function getInputs() {
+  const g = id => parseFloat(document.getElementById(id).value);
+  return {
+    b2c_students: g('b2c_students'),
+    b2c_cohorts_y2: g('b2c_cohorts_y2'),
+    b2c_cohorts_y5: g('b2c_cohorts_y5'),
+    b2c_price_y2: g('b2c_price_y2'),
+    b2c_price_y5: g('b2c_price_y5'),
+    b2c_cac: g('b2c_cac'),
+    b2c_lecturer: 360000,
+    b2c_venue: 280000,
+    b2c_material: 120000,
+    b2c_individual: 60000,
+    b2c_payment_fee: 0.036,
+    b2c_refund: 0.03,
+    b2b2c_rooms_y2: g('b2b2c_rooms_y2'),
+    b2b2c_rooms_y5: g('b2b2c_rooms_y5'),
+    b2b2c_price_y2: 1500000,
+    b2b2c_price_y5: g('b2b2c_price_y5'),
+    b2b2c_hours_new: g('b2b2c_hours_new'),
+    b2b2c_hours_cont: g('b2b2c_hours_cont'),
+    b2b2c_cac: 200000,
+    b2b2c_retention: g('b2b2c_retention') / 100,
+    b2b2c_var_cost_y5: 220000,
+    b2b_schools_y2: g('b2b_schools_y2'),
+    b2b_schools_y5: g('b2b_schools_y5'),
+    b2b_price_y2: 2500000,
+    b2b_price_y5: g('b2b_price_y5'),
+    b2b_var_cost_y2: 800000,
+    b2b_var_cost_y5: 296000,
+    b2b_cac: g('b2b_cac'),
+    wage: 2000,
+    fixed_y2: g('fixed_y2'),
+    fixed_y5: g('fixed_y5'),
+    ev_sales: g('ev_sales'),
+    per: 10,
+  };
+}
+
+function calcModel(inp) {
+  // B2C cohort P&L
+  const b2c_fixed_var = inp.b2c_lecturer + inp.b2c_venue + inp.b2c_material + inp.b2c_individual;
+
+  const calcB2CCohort = (price, cac, students) => {
+    const rev = price * students;
+    const payment = rev * inp.b2c_payment_fee;
+    const refund = rev * inp.b2c_refund;
+    const cac_total = cac * students;
+    const contrib = rev - b2c_fixed_var - payment - refund - cac_total;
+    return { rev, payment, refund, cac_total, b2c_fixed_var, contrib, contrib_rate: contrib / rev };
+  };
+
+  // Year2
+  const b2c_y2_cohort = calcB2CCohort(inp.b2c_price_y2, inp.b2c_cac, inp.b2c_students);
+  const b2c_rev_y2 = b2c_y2_cohort.rev * inp.b2c_cohorts_y2;
+  const b2c_var_y2 = (b2c_fixed_var + b2c_y2_cohort.payment / inp.b2c_students * inp.b2c_students + b2c_y2_cohort.refund / inp.b2c_students * inp.b2c_students + inp.b2c_cac * inp.b2c_students) * inp.b2c_cohorts_y2;
+  const b2c_contrib_y2 = b2c_y2_cohort.contrib * inp.b2c_cohorts_y2;
+
+  const b2b2c_var_y2 = inp.b2b2c_rooms_y2 * (inp.b2b2c_hours_new * inp.wage + inp.b2b2c_cac);
+  const b2b2c_rev_y2 = inp.b2b2c_rooms_y2 * inp.b2b2c_price_y2;
+  const b2b2c_contrib_y2 = b2b2c_rev_y2 - b2b2c_var_y2;
+
+  const b2b_var_y2 = inp.b2b_schools_y2 * (inp.b2b_var_cost_y2 + inp.b2b_cac);
+  const b2b_rev_y2 = inp.b2b_schools_y2 * inp.b2b_price_y2;
+  const b2b_contrib_y2 = b2b_rev_y2 - b2b_var_y2;
+
+  const total_rev_y2 = b2c_rev_y2 + b2b2c_rev_y2 + b2b_rev_y2;
+  const total_contrib_y2 = b2c_contrib_y2 + b2b2c_contrib_y2 + b2b_contrib_y2;
+  const op_profit_y2 = total_contrib_y2 - inp.fixed_y2;
+
+  // Year5
+  const b2c_y5_cohort = calcB2CCohort(inp.b2c_price_y5, inp.b2c_cac, inp.b2c_students);
+  const b2c_rev_y5 = b2c_y5_cohort.rev * inp.b2c_cohorts_y5;
+  const b2c_contrib_y5 = b2c_y5_cohort.contrib * inp.b2c_cohorts_y5;
+
+  const b2b2c_var_y5 = inp.b2b2c_rooms_y5 * inp.b2b2c_var_cost_y5;
+  const b2b2c_rev_y5 = inp.b2b2c_rooms_y5 * inp.b2b2c_price_y5;
+  const b2b2c_contrib_y5 = b2b2c_rev_y5 - b2b2c_var_y5;
+
+  const b2b_var_y5 = inp.b2b_schools_y5 * inp.b2b_var_cost_y5;
+  const b2b_rev_y5 = inp.b2b_schools_y5 * inp.b2b_price_y5;
+  const b2b_contrib_y5 = b2b_rev_y5 - b2b_var_y5;
+
+  const total_rev_y5 = b2c_rev_y5 + b2b2c_rev_y5 + b2b_rev_y5;
+  const total_var_y5 = (b2c_rev_y5 - b2c_contrib_y5) + b2b2c_var_y5 + b2b_var_y5;
+  const total_contrib_y5 = b2c_contrib_y5 + b2b2c_contrib_y5 + b2b_contrib_y5;
+  const op_profit_y5 = total_contrib_y5 - inp.fixed_y5;
+
+  // LTV/CAC B2B2C (Light, 3yr)
+  const light_year1_contrib = (inp.b2b2c_price_y2 - inp.b2b2c_hours_new * inp.wage - inp.b2b2c_cac) / 10000;
+  const light_cont_contrib_per = (inp.b2b2c_price_y2 - inp.b2b2c_hours_cont * inp.wage) / 10000;
+  const r = inp.b2b2c_retention;
+  const ltv_cac_b2b2c = (light_year1_contrib * 10000 + r * light_cont_contrib_per * 10000 + r*r * light_cont_contrib_per * 10000) / inp.b2b2c_cac;
+
+  // B2C LTV/CAC
+  const b2c_cac_before_contrib = b2c_y2_cohort.rev - b2c_fixed_var - b2c_y2_cohort.payment - b2c_y2_cohort.refund;
+  const ltv_cac_b2c = b2c_cac_before_contrib / (inp.b2c_cac * inp.b2c_students);
+
+  // B2B unit
+  const b2b_unit_contrib = inp.b2b_price_y2 - inp.b2b_var_cost_y2 - inp.b2b_cac;
+  const b2b_contrib_rate = b2b_unit_contrib / inp.b2b_price_y2;
+
+  return {
+    y2: { b2c: { rev: b2c_rev_y2, var: b2c_rev_y2 - b2c_contrib_y2, contrib: b2c_contrib_y2, contrib_rate: b2c_contrib_y2/b2c_rev_y2 },
+          b2b2c: { rev: b2b2c_rev_y2, var: b2b2c_var_y2, contrib: b2b2c_contrib_y2, contrib_rate: b2b2c_contrib_y2/b2b2c_rev_y2 },
+          b2b: { rev: b2b_rev_y2, var: b2b_var_y2, contrib: b2b_contrib_y2, contrib_rate: b2b_contrib_y2/b2b_rev_y2 },
+          total: { rev: total_rev_y2, contrib: total_contrib_y2, op_profit: op_profit_y2, op_rate: op_profit_y2/total_rev_y2 },
+          fixed: inp.fixed_y2 },
+    y5: { b2c: { rev: b2c_rev_y5, var: b2c_rev_y5 - b2c_contrib_y5, contrib: b2c_contrib_y5, contrib_rate: b2c_contrib_y5/b2c_rev_y5 },
+          b2b2c: { rev: b2b2c_rev_y5, var: b2b2c_var_y5, contrib: b2b2c_contrib_y5, contrib_rate: b2b2c_contrib_y5/b2b2c_rev_y5 },
+          b2b: { rev: b2b_rev_y5, var: b2b_var_y5, contrib: b2b_contrib_y5, contrib_rate: b2b_contrib_y5/b2b_rev_y5 },
+          total: { rev: total_rev_y5, contrib: total_contrib_y5, op_profit: op_profit_y5, op_rate: op_profit_y5/total_rev_y5 },
+          fixed: inp.fixed_y5 },
+    unit: {
+      b2c_cohort: b2c_y2_cohort,
+      ltv_cac_b2b2c,
+      ltv_cac_b2c,
+      b2b_unit_contrib,
+      b2b_contrib_rate,
+    },
+    inp,
+  };
+}
+
+// ===================== FORMAT =====================
+function fmt(n, short=false) {
+  if (n === undefined || isNaN(n)) return '—';
+  if (short) {
+    if (Math.abs(n) >= 1e8) return (n/1e8).toFixed(1) + '億';
+    if (Math.abs(n) >= 1e4) return (n/1e4).toFixed(0) + '万';
+    return n.toLocaleString();
+  }
+  if (Math.abs(n) >= 1e8) return '¥' + (n/1e8).toFixed(2) + '億';
+  if (Math.abs(n) >= 1e4) return '¥' + (n/1e4).toFixed(0) + '万';
+  return '¥' + n.toLocaleString();
+}
+function pct(n) { return (n*100).toFixed(1) + '%'; }
+
+// ===================== UPDATE LABELS =====================
+function updateLabels(inp) {
+  const labels = {
+    b2c_students: inp.b2c_students + '人',
+    b2c_cohorts_y2: inp.b2c_cohorts_y2 + '回',
+    b2c_cohorts_y5: inp.b2c_cohorts_y5 + '回',
+    b2c_price_y2: '¥' + inp.b2c_price_y2.toLocaleString(),
+    b2c_price_y5: '¥' + inp.b2c_price_y5.toLocaleString(),
+    b2c_cac: '¥' + inp.b2c_cac.toLocaleString(),
+    b2b2c_rooms_y2: inp.b2b2c_rooms_y2 + '教室',
+    b2b2c_rooms_y5: inp.b2b2c_rooms_y5 + '教室',
+    b2b2c_price_y5: '¥' + inp.b2b2c_price_y5.toLocaleString(),
+    b2b2c_hours_new: inp.b2b2c_hours_new + 'h',
+    b2b2c_hours_cont: inp.b2b2c_hours_cont + 'h',
+    b2b2c_retention: inp.b2b2c_retention * 100 + '%',
+    b2b_schools_y2: inp.b2b_schools_y2 + '校',
+    b2b_schools_y5: inp.b2b_schools_y5 + '校',
+    b2b_price_y5: '¥' + inp.b2b_price_y5.toLocaleString(),
+    b2b_cac: '¥' + inp.b2b_cac.toLocaleString(),
+    fixed_y2: '¥' + (inp.fixed_y2/1e4).toFixed(0) + '万',
+    fixed_y5: '¥' + (inp.fixed_y5/1e8).toFixed(1) + '億',
+    ev_sales: inp.ev_sales + 'x',
+  };
+  for (const [k,v] of Object.entries(labels)) {
+    const el = document.getElementById('v_'+k);
+    if (el) el.textContent = v;
+  }
+}
+
+// ===================== MAIN UPDATE =====================
+function update() {
+  const inp = getInputs();
+  updateLabels(inp);
+  const m = calcModel(inp);
+
+  updateDashboard(m);
+  updatePL(m);
+  updateBottleneck(m);
+  updateExit(m);
+  updateSensitivity(inp);
+}
+
+// ===================== DASHBOARD =====================
+function updateDashboard(m) {
+  const yr = m[currentYear];
+  const el = id => document.getElementById(id);
+
+  el('kpi_revenue').textContent = fmt(yr.total.rev);
+  el('kpi_revenue_sub').textContent = currentYear === 'y2' ? 'Year2 目標' : 'Year5 目標';
+
+  const crate = yr.total.contrib / yr.total.rev;
+  el('kpi_contribution').textContent = fmt(yr.total.contrib);
+  el('kpi_contribution_rate').textContent = '貢献利益率 ' + pct(crate);
+  document.querySelector('#tab-dashboard .kpi-grid .kpi-card:nth-child(2)').className =
+    'kpi-card ' + (crate >= 0.7 ? 'good' : crate >= 0.5 ? 'warn' : 'bad');
+
+  el('kpi_op_profit').textContent = fmt(yr.total.op_profit);
+  el('kpi_op_rate').textContent = '営業利益率 ' + pct(yr.total.op_rate);
+  document.querySelector('#tab-dashboard .kpi-grid .kpi-card:nth-child(3)').className =
+    'kpi-card ' + (yr.total.op_profit > 0 ? 'good' : 'bad');
+
+  if (currentYear === 'y5') {
+    const ev = m.inp.ev_sales * yr.total.rev;
+    el('kpi_ev').textContent = fmt(ev);
+    el('kpi_ev_sub').textContent = 'EV/Sales ' + m.inp.ev_sales + 'x';
+  } else {
+    el('kpi_ev').textContent = 'Year5で算出';
+    el('kpi_ev_sub').textContent = '—';
+  }
+
+  // Pie chart
+  destroyChart('chart_revenue_pie');
+  const pie_ctx = document.getElementById('chart_revenue_pie').getContext('2d');
+  charts['chart_revenue_pie'] = new Chart(pie_ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['B2C', 'B2B2C塾', 'B2B高校'],
+      datasets: [{ data: [yr.b2c.rev, yr.b2b2c.rev, yr.b2b.rev],
+        backgroundColor: ['#a78bfa','#00d4aa','#ffd93d'], borderWidth: 2, borderColor: '#1a1d27' }]
+    },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#8b90b8', font: { size: 11 } } } } }
+  });
+
+  // Margin bar
+  destroyChart('chart_margin_bar');
+  const bar_ctx = document.getElementById('chart_margin_bar').getContext('2d');
+  charts['chart_margin_bar'] = new Chart(bar_ctx, {
+    type: 'bar',
+    data: {
+      labels: ['B2C', 'B2B2C塾', 'B2B高校', '全体'],
+      datasets: [{
+        label: '貢献利益率',
+        data: [yr.b2c.contrib_rate*100, yr.b2b2c.contrib_rate*100, yr.b2b.contrib_rate*100, (yr.total.contrib/yr.total.rev)*100],
+        backgroundColor: ['rgba(167,139,250,0.7)','rgba(0,212,170,0.7)','rgba(255,217,61,0.7)','rgba(108,99,255,0.7)'],
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#2e3250' }, ticks: { color: '#8b90b8', callback: v => v + '%' }, max: 100 },
+        y: { grid: { color: '#2e3250' }, ticks: { color: '#8b90b8' } }
+      }
+    }
+  });
+
+  // Growth chart
+  destroyChart('chart_growth');
+  const growth_ctx = document.getElementById('chart_growth').getContext('2d');
+  const years = ['Year1(推定)', 'Year2', 'Year3(推定)', 'Year4(推定)', 'Year5'];
+  const y1_rev = m.y2.total.rev * 0.3;
+  const y3_rev = m.y2.total.rev + (m.y5.total.rev - m.y2.total.rev) * 0.33;
+  const y4_rev = m.y2.total.rev + (m.y5.total.rev - m.y2.total.rev) * 0.66;
+  const revData = [y1_rev, m.y2.total.rev, y3_rev, y4_rev, m.y5.total.rev];
+  const profData = [y1_rev*0.3, m.y2.total.op_profit, y3_rev*0.45, y4_rev*0.55, m.y5.total.op_profit];
+  charts['chart_growth'] = new Chart(growth_ctx, {
+    type: 'bar',
+    data: {
+      labels: years,
+      datasets: [
+        { label: '売上', data: revData.map(v=>v/1e8), backgroundColor: 'rgba(108,99,255,0.5)', borderRadius: 4 },
+        { label: '営業利益', data: profData.map(v=>v/1e8), backgroundColor: 'rgba(0,212,170,0.7)', borderRadius: 4 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#8b90b8' } } },
+      scales: {
+        x: { grid: { color: '#2e3250' }, ticks: { color: '#8b90b8' } },
+        y: { grid: { color: '#2e3250' }, ticks: { color: '#8b90b8', callback: v => v + '億' } }
+      }
+    }
+  });
+}
+
+// ===================== P&L =====================
+function updatePL(m) {
+  const yr = m[currentYearPL];
+  const body = document.getElementById('pl_body');
+  const rows = [
+    { label: '売上', b2c: yr.b2c.rev, b2b2c: yr.b2b2c.rev, b2b: yr.b2b.rev, total: yr.total.rev, cls: 'good' },
+    { label: '直接変動コスト', b2c: -yr.b2c.var, b2b2c: -yr.b2b2c.var, b2b: -yr.b2b.var, total: -(yr.b2c.var+yr.b2b2c.var+yr.b2b.var), neg: true },
+    { label: '直接貢献利益', b2c: yr.b2c.contrib, b2b2c: yr.b2b2c.contrib, b2b: yr.b2b.contrib, total: yr.total.contrib, bold: true },
+    { label: '貢献利益率', b2c: pct(yr.b2c.contrib_rate), b2b2c: pct(yr.b2b2c.contrib_rate), b2b: pct(yr.b2b.contrib_rate), total: pct(yr.total.contrib/yr.total.rev), rate: true },
+    { label: '固定費', total: -yr.fixed, neg: true, full: true },
+    { label: '営業利益', total: yr.total.op_profit, bold: true, full: true, profit: true },
+    { label: '営業利益率', total: pct(yr.total.op_rate), rate: true, full: true },
+  ];
+  body.innerHTML = rows.map(r => {
+    const cls = r.profit ? 'profit-row' : r.bold ? 'total-row' : '';
+    const fmtCell = (v) => {
+      if (v === undefined) return '<td>—</td>';
+      if (typeof v === 'string') return `<td style="color:var(--muted)">${v}</td>`;
+      const neg = v < 0;
+      return `<td class="${neg ? 'neg' : ''}">${fmt(v)}</td>`;
+    };
+    if (r.full) {
+      return `<tr class="${cls}"><td>${r.label}</td><td colspan="3" style="color:var(--muted)">—</td>${fmtCell(r.neg ? -(Math.abs(r.total)) : r.total)}</tr>`;
+    }
+    return `<tr class="${cls}"><td>${r.label}</td>${fmtCell(r.b2c)}${fmtCell(r.b2b2c)}${fmtCell(r.b2b)}${fmtCell(r.total)}</tr>`;
+  }).join('');
+
+  // Waterfall
+  destroyChart('chart_waterfall');
+  const wf_ctx = document.getElementById('chart_waterfall').getContext('2d');
+  const wfLabels = ['売上', 'B2C変動費', 'B2B2C変動費', 'B2B変動費', '固定費', '営業利益'];
+  const wfVals = [yr.total.rev, -yr.b2c.var, -yr.b2b2c.var, -yr.b2b.var, -yr.fixed, yr.total.op_profit];
+  const wfColors = wfVals.map((v,i) => {
+    if (i===0 || i===5) return v >= 0 ? 'rgba(0,212,170,0.8)' : 'rgba(244,67,54,0.8)';
+    return 'rgba(244,67,54,0.6)';
+  });
+  charts['chart_waterfall'] = new Chart(wf_ctx, {
+    type: 'bar',
+    data: {
+      labels: wfLabels,
+      datasets: [{ data: wfVals.map(v=>v/1e8), backgroundColor: wfColors, borderRadius: 4 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#2e3250' }, ticks: { color: '#8b90b8', font:{size:10} } },
+        y: { grid: { color: '#2e3250' }, ticks: { color: '#8b90b8', callback: v => v+'億' } }
+      }
+    }
+  });
+
+  // Cost chart
+  destroyChart('chart_cost');
+  const cost_ctx = document.getElementById('chart_cost').getContext('2d');
+  charts['chart_cost'] = new Chart(cost_ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['B2C変動費', 'B2B2C変動費', 'B2B変動費', '固定費', '営業利益'],
+      datasets: [{
+        data: [yr.b2c.var, yr.b2b2c.var, yr.b2b.var, yr.fixed, Math.max(0, yr.total.op_profit)],
+        backgroundColor: ['rgba(167,139,250,0.7)','rgba(0,212,170,0.5)','rgba(255,217,61,0.5)','rgba(255,107,107,0.6)','rgba(108,99,255,0.7)'],
+        borderWidth: 2, borderColor: '#1a1d27'
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#8b90b8', font:{size:10} } } }
+    }
+  });
+}
+
+// ===================== BOTTLENECK =====================
+function updateBottleneck(m) {
+  const inp = m.inp;
+  const y5 = m.y5;
+
+  const gates = [
+    {
+      name: 'B2C CAC',
+      target: 20000, current: inp.b2c_cac,
+      targetStr: '2万円/人以下', currentStr: '¥' + inp.b2c_cac.toLocaleString(),
+      desc: '顧客獲得コスト。5万円超でB2Cを本命チャネルから降格判断。ToC黒字獲得エンジンになれるかを決定。',
+      good: inp.b2c_cac <= 20000, warn: inp.b2c_cac <= 50000, pct_fill: Math.min(100, (50000-inp.b2c_cac)/40000*100),
+      color: inp.b2c_cac <= 20000 ? '#4caf50' : inp.b2c_cac <= 50000 ? '#ff9800' : '#f44336',
+      status: inp.b2c_cac <= 20000 ? 'ok' : inp.b2c_cac <= 50000 ? 'warn' : 'bad',
+    },
+    {
+      name: 'B2B2C継続率',
+      target: 80, current: inp.b2b2c_retention * 100,
+      targetStr: '80%以上', currentStr: (inp.b2b2c_retention * 100) + '%',
+      desc: '塾の年次更新率。70%未満でLTVと買収ストーリーが弱くなる。継続収益の安定性を規定。',
+      pct_fill: inp.b2b2c_retention * 100,
+      color: inp.b2b2c_retention >= 0.8 ? '#4caf50' : inp.b2b2c_retention >= 0.7 ? '#ff9800' : '#f44336',
+      status: inp.b2b2c_retention >= 0.8 ? 'ok' : inp.b2b2c_retention >= 0.7 ? 'warn' : 'bad',
+    },
+    {
+      name: '継続教室工数（Year5目標）',
+      target: 40, current: inp.b2b2c_hours_cont,
+      targetStr: '40h以下', currentStr: inp.b2b2c_hours_cont + 'h',
+      desc: '40h以下がオペレーション事業か人手ビジネスかの境界。未達ならYear5の9,000hは絵空事。',
+      pct_fill: Math.max(0, 100 - (inp.b2b2c_hours_cont - 40)/110*100),
+      color: inp.b2b2c_hours_cont <= 40 ? '#4caf50' : inp.b2b2c_hours_cont <= 80 ? '#ff9800' : '#f44336',
+      status: inp.b2b2c_hours_cont <= 40 ? 'ok' : inp.b2b2c_hours_cont <= 80 ? 'warn' : 'bad',
+    },
+    {
+      name: 'B2B高校 CAC',
+      target: 200000, current: inp.b2b_cac,
+      targetStr: '20万円/校以下（創業者営業）', currentStr: '¥' + inp.b2b_cac.toLocaleString(),
+      desc: 'BD人材1名で100〜150万円に跳ね上がる。その場合500万円単価への移行が必要。',
+      pct_fill: Math.max(0, 100 - (inp.b2b_cac - 200000)/1300000*100),
+      color: inp.b2b_cac <= 200000 ? '#4caf50' : inp.b2b_cac <= 600000 ? '#ff9800' : '#f44336',
+      status: inp.b2b_cac <= 200000 ? 'ok' : inp.b2b_cac <= 600000 ? 'warn' : 'bad',
+    },
+    {
+      name: '初年度工数/教室',
+      target: 150, current: inp.b2b2c_hours_new,
+      targetStr: '150h以下（目標）', currentStr: inp.b2b2c_hours_new + 'h',
+      desc: '225hワーストが続くと人手ビジネスのまま。テンプレ化・AI補助で圧縮できるか。',
+      pct_fill: Math.max(0, 100 - (inp.b2b2c_hours_new - 120)/180*100),
+      color: inp.b2b2c_hours_new <= 150 ? '#4caf50' : inp.b2b2c_hours_new <= 225 ? '#ff9800' : '#f44336',
+      status: inp.b2b2c_hours_new <= 150 ? 'ok' : inp.b2b2c_hours_new <= 225 ? 'warn' : 'bad',
+    },
+    {
+      name: 'B2C LTV/CAC比率',
+      target: 4, current: m.unit.ltv_cac_b2c.toFixed(1),
+      targetStr: '4〜6x以上', currentStr: m.unit.ltv_cac_b2c.toFixed(1) + 'x',
+      desc: 'B2Cの獲得効率。単回コースのためLTV計算は慎重に。4x以上で健全な獲得構造。',
+      pct_fill: Math.min(100, m.unit.ltv_cac_b2c / 8 * 100),
+      color: m.unit.ltv_cac_b2c >= 4 ? '#4caf50' : m.unit.ltv_cac_b2c >= 2 ? '#ff9800' : '#f44336',
+      status: m.unit.ltv_cac_b2c >= 4 ? 'ok' : m.unit.ltv_cac_b2c >= 2 ? 'warn' : 'bad',
+    },
+    {
+      name: 'B2B2C LTV/CAC（Light・継続率連動）',
+      target: 12, current: m.unit.ltv_cac_b2b2c.toFixed(1),
+      targetStr: '12x以上（年次・継続率80%）', currentStr: m.unit.ltv_cac_b2b2c.toFixed(1) + 'x',
+      desc: '継続率が高いほどLTVが伸びる。80%で12.9x・70%で11.9x・90%で17x強。買収側からの主要評価軸。',
+      pct_fill: Math.min(100, m.unit.ltv_cac_b2b2c / 20 * 100),
+      color: m.unit.ltv_cac_b2b2c >= 12 ? '#4caf50' : m.unit.ltv_cac_b2b2c >= 8 ? '#ff9800' : '#f44336',
+      status: m.unit.ltv_cac_b2b2c >= 12 ? 'ok' : m.unit.ltv_cac_b2b2c >= 8 ? 'warn' : 'bad',
+    },
+    {
+      name: 'Year5 営業利益率',
+      target: 0.66, current: y5.total.op_rate,
+      targetStr: '66%以上', currentStr: pct(y5.total.op_rate),
+      desc: 'Year5モデルの健全性。組織化固定費1.2億円を前提とした指標。工数・継続率・単価のどれかが未達だと低下。',
+      pct_fill: Math.min(100, y5.total.op_rate / 0.8 * 100),
+      color: y5.total.op_rate >= 0.66 ? '#4caf50' : y5.total.op_rate >= 0.5 ? '#ff9800' : '#f44336',
+      status: y5.total.op_rate >= 0.66 ? 'ok' : y5.total.op_rate >= 0.5 ? 'warn' : 'bad',
+    },
+  ];
+
+  const statusLabel = { ok: '✅ 達成', warn: '⚠️ 要注意', bad: '🔴 未達・要対策', unknown: '未検証' };
+  document.getElementById('gate_grid').innerHTML = gates.map(g => `
+    <div class="gate-card">
+      <div class="gate-header">
+        <h4>${g.name}</h4>
+        <span class="gate-status ${g.status}">${statusLabel[g.status]}</span>
+      </div>
+      <div class="gate-desc">${g.desc}</div>
+      <div class="gate-bar-bg"><div class="gate-bar-fill" style="width:${Math.max(2,g.pct_fill)}%;background:${g.color}"></div></div>
+      <div class="gate-nums"><span>目標: ${g.targetStr}</span><span>現在: ${g.currentStr}</span></div>
+    </div>
+  `).join('');
+
+  // B2C unit sensitivity scatter
+  destroyChart('chart_b2c_unit');
+  const b2c_ctx = document.getElementById('chart_b2c_unit').getContext('2d');
+  const cacVals = [5000, 10000, 20000, 30000, 50000, 75000, 100000];
+  const priceVals = [75000, 100000, 120000, 150000];
+  const students = inp.b2c_students;
+  const datasets = priceVals.map((price, pi) => {
+    const colors = ['rgba(167,139,250,0.8)','rgba(0,212,170,0.8)','rgba(255,217,61,0.8)','rgba(255,107,107,0.8)'];
+    return {
+      label: '単価 ¥' + (price/1e4).toFixed(0) + '万',
+      data: cacVals.map(cac => {
+        const rev = price * students;
+        const vc = inp.b2c_lecturer + inp.b2c_venue + inp.b2c_material + inp.b2c_individual;
+        const contrib = rev - vc - rev*inp.b2c_payment_fee - rev*inp.b2c_refund - cac*students;
+        return { x: cac/1e4, y: (contrib/rev)*100 };
+      }),
+      borderColor: colors[pi], backgroundColor: colors[pi], showLine: true, tension: 0.3, pointRadius: 4,
+    };
+  });
+  charts['chart_b2c_unit'] = new Chart(b2c_ctx, {
+    type: 'scatter',
+    data: { datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#8b90b8' } } },
+      scales: {
+        x: { title: { display: true, text: 'CAC（万円/人）', color: '#8b90b8' }, grid: { color: '#2e3250' }, ticks: { color: '#8b90b8', callback: v => v+'万' } },
+        y: { title: { display: true, text: '貢献利益率（%）', color: '#8b90b8' }, grid: { color: '#2e3250' }, ticks: { color: '#8b90b8', callback: v => v+'%' } }
+      }
+    }
+  });
+}
+
+// ===================== EXIT =====================
+function updateExit(m) {
+  const y5 = m.y5;
+  const inp = m.inp;
+  const ev_sales_low = y5.total.rev;
+  const ev_sales_std = y5.total.rev * inp.ev_sales;
+  const ev_sales_high = y5.total.rev * 2;
+  const ev_per = y5.total.op_profit * inp.per;
+
+  document.getElementById('exit_grid').innerHTML = `
+    <div class="exit-card">
+      <div class="method">EV/Sales ${inp.ev_sales.toFixed(1)}x（選択中）</div>
+      <div class="ev">${fmt(ev_sales_std)}</div>
+      <div class="range">売上 ${fmt(y5.total.rev)} × ${inp.ev_sales.toFixed(1)}x</div>
+    </div>
+    <div class="exit-card">
+      <div class="method">EV/Sales レンジ（1.0〜2.0x）</div>
+      <div class="ev">${fmt(ev_sales_low)} 〜 ${fmt(ev_sales_high)}</div>
+      <div class="range">現実的レンジ下限〜上限</div>
+    </div>
+    <div class="exit-card">
+      <div class="method">PER ${inp.per}x（補助）</div>
+      <div class="ev">${fmt(ev_per)}</div>
+      <div class="range">営業利益 ${fmt(y5.total.op_profit)} × ${inp.per}x</div>
+    </div>
+  `;
+
+  // Scenario EV
+  destroyChart('chart_ev_scenario');
+  const ev_ctx = document.getElementById('chart_ev_scenario').getContext('2d');
+  const scenarioRevs = { '保守': 605000000, '標準': m.y5.total.rev, '強気': 805000000 };
+  const sr = Object.entries(scenarioRevs);
+  charts['chart_ev_scenario'] = new Chart(ev_ctx, {
+    type: 'bar',
+    data: {
+      labels: sr.map(([k])=>k),
+      datasets: [
+        { label: 'EV/Sales 1.0x', data: sr.map(([,v])=>v/1e8), backgroundColor: 'rgba(108,99,255,0.5)', borderRadius: 4 },
+        { label: `EV/Sales ${inp.ev_sales}x`, data: sr.map(([,v])=>v*inp.ev_sales/1e8), backgroundColor: 'rgba(0,212,170,0.7)', borderRadius: 4 },
+        { label: 'EV/Sales 2.0x', data: sr.map(([,v])=>v*2/1e8), backgroundColor: 'rgba(255,217,61,0.5)', borderRadius: 4 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#8b90b8', font:{size:10} } } },
+      scales: {
+        x: { grid: { color: '#2e3250' }, ticks: { color: '#8b90b8' } },
+        y: { grid: { color: '#2e3250' }, ticks: { color: '#8b90b8', callback: v => v+'億' } }
+      }
+    }
+  });
+
+  // Multiplier sensitivity
+  destroyChart('chart_ev_mult');
+  const mult_ctx = document.getElementById('chart_ev_mult').getContext('2d');
+  const mults = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0];
+  charts['chart_ev_mult'] = new Chart(mult_ctx, {
+    type: 'bar',
+    data: {
+      labels: mults.map(v=>v+'x'),
+      datasets: [{
+        data: mults.map(v => (m.y5.total.rev * v)/1e8),
+        backgroundColor: mults.map(v => v === Math.round(inp.ev_sales*10)/10 ? 'rgba(0,212,170,0.9)' : 'rgba(108,99,255,0.5)'),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#2e3250' }, ticks: { color: '#8b90b8' } },
+        y: { grid: { color: '#2e3250' }, ticks: { color: '#8b90b8', callback: v => v+'億' } }
+      }
+    }
+  });
+}
+
+// ===================== SENSITIVITY =====================
+function updateSensitivity(inp) {
+  // B2B2C単価 × 継続工数 → Year5営業利益
+  const prices = [1500000, 1800000, 2000000, 2200000, 2500000, 3000000];
+  const hours = [20, 30, 40, 60, 80, 120, 150];
+  const tbl = document.getElementById('sens_table_main');
+
+  // Calculate reference (standard)
+  const stdProfit = calcModel(inp).y5.total.op_profit;
+
+  let html = '<tr><th>単価↓ / 工数→</th>' + hours.map(h=>`<th>${h}h</th>`).join('') + '</tr>';
+  for (const price of prices) {
+    html += `<tr><td style="color:#8b90b8;font-weight:600">¥${(price/1e4).toFixed(0)}万</td>`;
+    for (const h of hours) {
+      const var_y5 = inp.b2b2c_rooms_y5 * inp.b2b2c_var_cost_y5;
+      const rev_y5 = inp.b2b2c_rooms_y5 * price;
+      const b2b2c_contrib_y5 = rev_y5 - var_y5;
+      // Recalc full y5
+      const b2c_y5 = (inp.b2c_price_y5 * inp.b2c_students - inp.b2c_lecturer - inp.b2c_venue - inp.b2c_material - inp.b2c_individual - inp.b2c_price_y5*inp.b2c_students*inp.b2c_payment_fee - inp.b2c_price_y5*inp.b2c_students*inp.b2c_refund - inp.b2c_cac*inp.b2c_students) * inp.b2c_cohorts_y5;
+      const b2b_y5 = inp.b2b_schools_y5 * (inp.b2b_price_y5 - inp.b2b_var_cost_y5);
+      // Adjust for hours (affects B2B2C var cost proportionally)
+      const hourAdj = (h - inp.b2b2c_hours_cont) * inp.wage * inp.b2b2c_rooms_y5 * 0.7;
+      const profit = b2c_y5 + b2b2c_contrib_y5 - hourAdj + b2b_y5 - inp.fixed_y5;
+      const pB = profit / 1e8;
+      let cls = pB >= 5 ? 'heat-best' : pB >= 4 ? 'heat-high' : pB >= 3 ? 'heat-mid' : 'heat-low';
+      if (price === inp.b2b2c_price_y5 && h === inp.b2b2c_hours_cont) cls = 'heat-best';
+      html += `<td class="${cls}">${pB.toFixed(1)}億</td>`;
+    }
+    html += '</tr>';
+  }
+  tbl.innerHTML = html;
+
+  // B2C: 単価 × CAC
+  const b2c_prices = [75000, 90000, 100000, 120000, 150000, 180000];
+  const cac_vals = [5000, 10000, 20000, 30000, 50000, 75000, 100000];
+  const tbl2 = document.getElementById('sens_table_b2c');
+  let html2 = '<tr><th>単価↓ / CAC→</th>' + cac_vals.map(c=>`<th>¥${(c/1e4).toFixed(1)}万</th>`).join('') + '</tr>';
+  for (const price of b2c_prices) {
+    html2 += `<tr><td style="color:#8b90b8;font-weight:600">¥${(price/1e4).toFixed(0)}万</td>`;
+    for (const cac of cac_vals) {
+      const rev = price * inp.b2c_students;
+      const vc = inp.b2c_lecturer + inp.b2c_venue + inp.b2c_material + inp.b2c_individual;
+      const contrib = rev - vc - rev*inp.b2c_payment_fee - rev*inp.b2c_refund - cac*inp.b2c_students;
+      const rate = contrib / rev;
+      let cls = rate >= 0.65 ? 'heat-best' : rate >= 0.5 ? 'heat-high' : rate >= 0.3 ? 'heat-mid' : 'heat-low';
+      if (Math.abs(price - inp.b2c_price_y2) < 1 && Math.abs(cac - inp.b2c_cac) < 1) cls = 'heat-best';
+      html2 += `<td class="${cls}">${pct(rate)}</td>`;
+    }
+    html2 += '</tr>';
+  }
+  tbl2.innerHTML = html2;
+}
+
+// ===================== UTILS =====================
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+function showTab(name) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+  update();
+}
+
+function setYear(yr, btn) {
+  currentYear = yr;
+  btn.parentElement.querySelectorAll('.year-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  update();
+}
+
+function setYearPL(yr, btn) {
+  currentYearPL = yr;
+  btn.parentElement.querySelectorAll('.year-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  update();
+}
+
+// ===================== INIT =====================
+update();
+</script>
+</body>
+</html>
